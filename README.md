@@ -1,93 +1,68 @@
-# Dogfight — Lab 02: Objects, Prototypes, and `this`
+Dogfight — Lab 02
 
-## Run the project
+Запуск проєкту
+
+Для запуску потрібно виконати команди:
 
 ```bash
 npm install
 npm run dev
 ```
 
-Controls: **W / ↑** thrust, **A/D / ←/→** rotate, **Space / F** regular shot, **H** homing shot. Destroy asteroids for points, collect green pickups to restore health, and avoid collisions. After losing all health the ship respawns after two seconds.
+Керування: W / ↑ — прискорення, A / D / ← / → — поворот, Space / F — постріл, H — самонавідний постріл.
 
-## What is implemented
+## Що було реалізовано
 
-- `Vector2`: immutable `add`, `sub`, `scale`, `length`, `normalize`, `rotate`, `dot`, and `fromAngle`.
-- `Entity`: common `id`, `position`, `velocity`, `radius`, `kind`, `dead`, and `update`; IDs come from a private module counter.
-- `Ship extends Entity`: one inheritance level, private `#hp` with getter, thrust, rotation, firing and respawn.
-- `Bullet`, `Asteroid`, `Pickup`, `Explosion`: entities with different update behavior; bullets have a TTL.
-- `World`: stores entities in `Map`, supports `spawn`, `despawn`, `get`, iteration and `ofKind(kind)`, resolves circle collisions and removes dead entities in `sweep()`.
-- Circle collisions: deliberately simple O(n²) pair checks. Bullets damage asteroids/ships; destruction creates particle explosions. Asteroid destruction and pickups add score.
-- A ship has three health points. A pickup restores one health point (up to three). When health reaches zero, the ship respawns after two seconds at a position chosen to avoid asteroids.
-- The homing bullet uses a **composed behavior object** (`createHomingBehavior`) rather than a special inheritance branch.
+У лабораторній роботі було доопрацьовано ігрову логіку та використано можливості JavaScript, пов'язані з об'єктами, прототипами й `this`.
 
-## `this`: the event-handler bug and fixes
+Для роботи з координатами створено клас `Vector2`, методи якого повертають нові вектори. Основний клас `Entity` містить спільні властивості ігрових об'єктів. Від нього успадковуються `Ship`, `Bullet`, `Asteroid`, `Pickup` та `Explosion`.
 
-For ordinary functions, the practical `this` binding rules from strongest to weakest are:
+Клас `World` зберігає об'єкти в `Map`, оновлює їх, обробляє зіткнення та видаляє знищені об'єкти. Кулі мають обмежений час існування, а зіткнення з астероїдами впливають на здоров'я корабля. Також реалізовано вибухи, нарахування очок, аптечки та відродження корабля через дві секунди після втрати всього здоров'я.
 
-1. **Constructor call:** `new Fn()` binds `this` to the new instance.
-2. **Explicit binding:** `call`, `apply`, or `bind` supplies the receiver.
-3. **Implicit method call:** `object.method()` makes `this === object`.
-4. **Default call:** a plain function call has `this === undefined` in strict mode (class methods/modules are strict); in non-strict classic scripts it defaults to the global object.
+Для самонаведення використано композицію: куля отримує окремий об'єкт поведінки `createHomingBehavior`, який змінює напрямок її руху залежно від положення найближчого астероїда.
 
-Arrow functions are different: they capture `this` from the surrounding scope and do not get a new `this` from the call site.
+## Робота з `this`
 
-In `setTimeout(ship.fire, 100)`, the callback is detached from `ship`; its `this` is **not the ship**. The timer API may invoke a normal callback with a global receiver in a browser, but it does not restore the original object receiver. Class methods are strict, so this still does not make `this` equal to `ship`.
+Під час роботи з методами класів важливо враховувати, як саме викликається функція. Якщо передати метод окремо від об'єкта, його `this` може втратити посилання на початковий об'єкт.
 
-A class method uses the receiver supplied by the call site. Passing `ship.fire` alone to an event listener loses the `ship` receiver:
+Наприклад:
 
-```js
-button.addEventListener("click", ship.fire); // wrong: this is not ship
+```javascript
+button.addEventListener("click", ship.fire);
 ```
 
-Three fixes:
+У такому випадку метод викликається без потрібного контексту. Щоб зберегти його, можна використати стрілкову функцію:
 
-```js
-button.addEventListener("click", () => ship.fire(world)); // arrow wrapper
-button.addEventListener("click", ship.fire.bind(ship, world)); // bind receiver/argument
-button.addEventListener("click", function () {
-  ship.fire(world);
-}); // normal wrapper
+```javascript
+button.addEventListener("click", () => ship.fire(world));
 ```
 
-Trade-offs: the arrow wrapper creates a new function and captures surrounding variables; `bind` creates a new function that you must keep a reference to if you later want to remove the listener; the normal wrapper is more verbose and has its own `this`, although it explicitly calls `ship.fire` so that does not matter here. Do not register `ship.fire` directly. In this game firing is called as `this.fire(world)` from `Ship.update`, so its receiver is preserved.
+Також можна застосувати `bind()`. У самій грі постріл викликається через `this.fire(world)`, тому контекст корабля зберігається.
 
-Arrow functions do not have their own `this`, so `.bind(...)` cannot change their `this`. Arrows are useful for callbacks that should capture the surrounding `this`; they are usually a poor choice for a shared prototype method that needs a different instance receiver for every object.
+Успадкування та композиція
 
-## Composition vs inheritance (design note)
+Успадкування використовується для об'єктів, які мають спільні властивості та поведінку. Наприклад, корабель і куля є ігровими сутностями, тому успадковують клас `Entity`.
 
-Inheritance is used only for the shared “is an entity” relationship: `Ship`, `Bullet`, `Asteroid`, `Pickup`, and `Explosion` are all entities. It is not used to build combinations such as `HomingBullet extends Bullet extends Entity` and `HomingAsteroid extends Asteroid extends Entity`. Instead, a bullet may hold a `behavior` object and delegate its homing update to it. The same behavior could be attached to another moving object without adding another subclass. `Pickup` is an `Entity` with its own stationary update and collision handling; it is not a `Ship`, so it does not inherit ship-only health, controls, or firing.
+Композиція дозволяє додавати об'єктам окремі можливості без створення додаткових класів-нащадків. У цій роботі так реалізовано самонаведення кулі. Такий підхід дає змогу змінювати поведінку об'єкта незалежно від його основного класу.
 
-## Why `Map` instead of a plain object?
+Прототипи та Map
 
-1. It is designed for key/value collections and accepts numeric IDs directly.
-2. It provides predictable iteration over entities and convenient `values()` / `entries()`.
-3. It has explicit collection operations such as `set`, `get`, `has`, and `delete`, and a reliable `size`.
+У JavaScript об'єкти можуть отримувати властивості й методи через прототип. Це можна перевірити за допомогою `Object.create()`, а виклик методу з іншим контекстом — за допомогою `call()`.
 
-## Prototype experiment
+Для зберігання ігрових об'єктів використовується `Map`, оскільки вона дозволяє зберігати об'єкти за їхніми ідентифікаторами, отримувати їх за ключем і перебирати всі елементи колекції.
 
-Open the browser console and run:
+Перевірка роботи
 
-```js
-const base = {
-  describe() {
-    return `Entity: ${this.kind}`;
-  },
-};
-const asteroid = Object.create(base);
-asteroid.kind = "asteroid";
-asteroid.describe(); // "Entity: asteroid" — delegated to base
-const method = asteroid.describe;
-method(); // this is undefined in strict mode (module)
-method.call(asteroid); // "Entity: asteroid" — receiver supplied explicitly
+Під час перевірки потрібно переконатися, що корабель рухається та повертається, звичайні й самонавідні кулі працюють, а зіткнення з астероїдами впливають на здоров'я. Також перевіряється знищення астероїдів, нарахування очок, відновлення здоров'я аптечками та відродження корабля після знищення.
+
+Для перевірки проєкту використовуються команди:
+
+```bash
+npm run lint
+npm run format:check
+npm run build
 ```
 
-`class` syntax is built on JavaScript's prototype system. `new Ship(...)` creates an object, connects it to `Ship.prototype`, calls the constructor with that object as `this`, and returns the instance (unless the constructor explicitly returns another object).
+ Висновок
 
-## Before submission
-
-- [ ] `npm run dev` — test movement, regular shot and homing shot.
-- [ ] Shoot asteroids; confirm hits/destruction, explosions and score.
-- [ ] Collect a green pickup; confirm health/score update.
-- [ ] Take damage and verify the two-second respawn.
-- [ ] `npm run build`, `npm run lint`, and `npm run format:check`.
-- [ ] Commit changes and create tag `lab-02` after testing.
+У результаті роботи було закріплено використання класів, успадкування, прототипів і `this` у JavaScript. Також було реалізовано композицію для додавання поведінки об'єктам та використано `Map` для зберігання ігрових сутностей. Перевірка допомагає переконатися, що реалізовані механіки працюють правильно, а проєкт проходить основні технічні перевірки.

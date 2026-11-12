@@ -1,25 +1,63 @@
+
 <!doctype html>
-<html lang="en">
+<html lang="uk">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dogfight — Lab 02</title>
+    <meta
+      name="description"
+      content="Dogfight — Lab 03. Гра з астероїдами, спрайтами та вибором арени."
+    />
+    <title>Dogfight — Lab 03</title>
   </head>
   <body>
     <main class="game-shell">
-      <h1>Dogfight — Lab 02</h1>
+      <h1>Dogfight — Lab 03</h1>
+
+      <section id="lobby" class="lobby">
+        <h2>Космічне лобі</h2>
+        <p>Введи ім'я та вибери арену, щоб почати гру.</p>
+
+        <form id="lobby-form">
+          <label for="player-name">Ім'я гравця</label>
+          <input
+            id="player-name"
+            name="playerName"
+            type="text"
+            maxlength="20"
+            placeholder="Наприклад, Pilot"
+            required
+          />
+
+          <label for="room-select">Кімната</label>
+          <select id="room-select" name="room" required>
+            <option value="">Завантаження кімнат...</option>
+          </select>
+
+          <p id="lobby-status" role="status" aria-live="polite">
+            Завантаження доступних кімнат...
+          </p>
+
+          <button id="join-button" type="submit" disabled>
+            Join
+          </button>
+        </form>
+      </section>
+
       <p class="help">
-        W / ↑ — thrust · A,D / ←,→ — rotate · Space / F — fire · collect green
-        pickups
+        Керування: W / ↑ — рух, A / D або ← / → — поворот,
+        Space / F — стрільба, H — самонавідний постріл.
       </p>
+
       <div class="canvas-wrap">
         <canvas id="game"></canvas>
       </div>
+
       <p class="help">
-        Destroy asteroids to score points. Avoid collisions. You respawn after 2
-        seconds.
+        Знищуй астероїди, набирай очки та уникай зіткнень.
       </p>
     </main>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

@@ -3,10 +3,12 @@ import { Asteroid } from "./asteroid.js";
 import { Pickup } from "./pickup.js";
 import { Explosion } from "./explosion.js";
 
-export class World {
-  constructor(width, height) {
+export class World extends EventTarget {
+  constructor(width, height, maxAsteroids = 7) {
+    super();
     this.width = width;
     this.height = height;
+    this.maxAsteroids = maxAsteroids;
     this.entities = new Map();
     this.player = null;
     this.spawnTimer = 0;
@@ -39,13 +41,19 @@ export class World {
     }
   }
 
+  
   step(dt, inputs) {
     this.spawnTimer -= dt;
     this.pickupTimer -= dt;
-    if (this.spawnTimer <= 0 && [...this.ofKind("asteroid")].length < 7) {
+
+    if (
+      this.spawnTimer <= 0 &&
+      [...this.ofKind("asteroid")].length < this.maxAsteroids
+    ) {
       this.spawnRandomAsteroid();
       this.spawnTimer = 1.1;
     }
+
     if (this.pickupTimer <= 0 && [...this.ofKind("pickup")].length < 2) {
       this.spawn(
         new Pickup(
@@ -57,12 +65,13 @@ export class World {
     }
 
     for (const entity of this.entities.values()) {
-      // The player continues updating while dead so its respawn timer can expire.
-      if (!entity.dead || entity.kind === "ship")
+      if (!entity.dead || entity.kind === "ship") {
         entity.update(dt, this, inputs);
+      }
     }
 
     this.resolveCollisions();
+
     for (const entity of this.entities.values()) {
       if (entity.kind !== "explosion" && entity.kind !== "pickup") {
         entity.position = new Vector2(
@@ -70,6 +79,7 @@ export class World {
           (entity.position.y + this.height) % this.height,
         );
       }
+
       if (entity.kind === "pickup") {
         entity.position = new Vector2(
           Math.max(
@@ -83,6 +93,7 @@ export class World {
         );
       }
     }
+
     this.sweep();
   }
 
@@ -90,7 +101,6 @@ export class World {
     const objects = [...this.entities.values()].filter(
       (entity) => !entity.dead && entity.kind !== "explosion",
     );
-    // Deliberately simple O(n²) circle-circle collision system.
     for (let i = 0; i < objects.length; i += 1) {
       for (let j = i + 1; j < objects.length; j += 1) {
         const a = objects[i];
@@ -120,17 +130,18 @@ export class World {
     )
       return;
     bullet.dead = true;
+    this.dispatchEvent(new CustomEvent("hit", { detail: { bullet, target } }));
     if (target.kind === "asteroid") {
       target.damage(bullet.damage);
       if (target.dead) {
         if (this.player) this.player.score += 10;
-        this.spawn(new Explosion(target.position, 16));
+        this.createExplosion(target.position, 16);
       }
     } else {
       target.damage(bullet.damage);
       if (target.dead) {
         target.respawnTimer = 2;
-        this.spawn(new Explosion(target.position, 24));
+        this.createExplosion(target.position, 24);
       }
     }
   }
@@ -140,7 +151,7 @@ export class World {
     pickup.dead = true;
     ship.heal(1);
     ship.score += 25;
-    this.spawn(new Explosion(pickup.position, 8));
+    this.createExplosion(pickup.position, 8);
   }
 
   shipHitsAsteroid(ship, asteroid) {
@@ -150,8 +161,14 @@ export class World {
     ship.damage(1);
     ship.invulnerable = 1;
     asteroid.damage(1);
-    this.spawn(new Explosion(ship.position, 10));
+    this.createExplosion(ship.position, 10);
     if (ship.dead) ship.respawnTimer = 2;
+  }
+
+  createExplosion(position, radius) {
+    const explosion = this.spawn(new Explosion(position, radius));
+    this.dispatchEvent(new CustomEvent("exploded", { detail: { position, radius, explosion } }));
+    return explosion;
   }
 
   respawnShip(ship) {
@@ -161,7 +178,6 @@ export class World {
     ship.angle = -Math.PI / 2;
     ship.dead = false;
     ship.invulnerable = 2;
-    // Reset health only when a new life begins.
     ship.restoreHealth();
   }
 
@@ -195,7 +211,6 @@ export class World {
 
   sweep() {
     for (const [id, entity] of this.entities) {
-      // Keep the player object in the world while its two-second respawn timer runs.
       if (entity.dead && !(entity.kind === "ship" && this.player === entity)) {
         this.entities.delete(id);
       }

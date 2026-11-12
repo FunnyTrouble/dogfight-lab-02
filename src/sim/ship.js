@@ -48,6 +48,7 @@ export class Ship extends Entity {
     );
     bullet.owner = this;
     world.spawn(bullet);
+    world.dispatchEvent(new CustomEvent("fired", { detail: { ship: this, bullet } }));
     this.fireCooldown = 0.24;
     return bullet;
   }

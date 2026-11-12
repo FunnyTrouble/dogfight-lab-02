@@ -16,7 +16,6 @@ export function drawBackground(ctx, width, height) {
     ctx.lineTo(width, y);
     ctx.stroke();
   }
-  // Small stars add depth without requiring image assets.
   ctx.fillStyle = "rgba(219,234,254,.5)";
   for (let i = 0; i < 35; i += 1) {
     const x = (i * 137.5) % Math.max(width, 1);
@@ -25,28 +24,55 @@ export function drawBackground(ctx, width, height) {
   }
 }
 
-export function drawWorld(ctx, world, stats) {
+
+export function drawWorld(ctx, world, stats, assets = {}) {
+  const sprites = assets.sprites;
+
   for (const entity of world) {
     if (entity.dead) continue;
-    if (entity.kind === "ship") drawShip(ctx, entity);
-    else if (entity.kind === "bullet") drawBullet(ctx, entity);
-    else if (entity.kind === "asteroid") drawAsteroid(ctx, entity);
+
+    if (entity.kind === "ship") drawShip(ctx, entity, sprites);
+    else if (entity.kind === "bullet") drawBullet(ctx, entity, sprites);
+    else if (entity.kind === "asteroid") drawAsteroid(ctx, entity, sprites);
     else if (entity.kind === "pickup") drawPickup(ctx, entity);
     else if (entity.kind === "explosion") drawExplosion(ctx, entity);
   }
+
   drawHud(ctx, world, stats);
 }
 
-function drawShip(ctx, ship) {
+
+
+function drawShip(ctx, ship, sprites) {
   ctx.save();
   ctx.translate(ship.position.x, ship.position.y);
-  ctx.rotate(ship.angle);
+
+  ctx.rotate(ship.angle + (sprites ? Math.PI / 2 : 0));
+
   ctx.globalAlpha =
     ship.invulnerable > 0
       ? Math.floor(performance.now() / 100) % 2
         ? 0.35
         : 1
       : 1;
+
+  if (sprites) {
+    ctx.drawImage(
+      sprites,
+      0,
+      ship.thrust ? 0 : 64,
+      64,
+      64,
+      -32,
+      -32,
+      64,
+      64,
+    );
+
+    ctx.restore();
+    return;
+  }
+
   ctx.beginPath();
   ctx.moveTo(19, 0);
   ctx.lineTo(-12, -10);
@@ -58,6 +84,7 @@ function drawShip(ctx, ship) {
   ctx.strokeStyle = "#60a5fa";
   ctx.lineWidth = 1.5;
   ctx.stroke();
+
   if (ship.thrust) {
     ctx.beginPath();
     ctx.moveTo(-8, -5);
@@ -67,12 +94,39 @@ function drawShip(ctx, ship) {
     ctx.fillStyle = "#fbbf24";
     ctx.fill();
   }
+
   ctx.restore();
 }
 
-function drawBullet(ctx, bullet) {
+
+
+function drawBullet(ctx, bullet, sprites) {
+  if (sprites) {
+    const size = Math.max(12, bullet.radius * 4);
+
+    ctx.drawImage(
+      sprites,
+      64,
+      0,
+      32,
+      32,
+      bullet.position.x - size / 2,
+      bullet.position.y - size / 2,
+      size,
+      size,
+    );
+
+    return;
+  }
+
   ctx.beginPath();
-  ctx.arc(bullet.position.x, bullet.position.y, bullet.radius, 0, Math.PI * 2);
+  ctx.arc(
+    bullet.position.x,
+    bullet.position.y,
+    bullet.radius,
+    0,
+    Math.PI * 2,
+  );
   ctx.fillStyle = bullet.behavior ? "#c4b5fd" : "#fbbf24";
   ctx.shadowColor = ctx.fillStyle;
   ctx.shadowBlur = 10;
@@ -80,27 +134,57 @@ function drawBullet(ctx, bullet) {
   ctx.shadowBlur = 0;
 }
 
-function drawAsteroid(ctx, asteroid) {
+
+
+function drawAsteroid(ctx, asteroid, sprites) {
   ctx.save();
   ctx.translate(asteroid.position.x, asteroid.position.y);
   ctx.rotate(asteroid.angle);
+
+  if (sprites) {
+    // Використовуємо два різні кадри астероїдів.
+    const spriteX = asteroid.radius > 24 ? 160 : 96;
+    const size = asteroid.radius * 2;
+
+    ctx.drawImage(
+      sprites,
+      spriteX,
+      0,
+      64,
+      64,
+      -size / 2,
+      -size / 2,
+      size,
+      size,
+    );
+
+    ctx.restore();
+    return;
+  }
+
   ctx.beginPath();
   const sides = 9;
+
   for (let i = 0; i < sides; i += 1) {
     const angle = (i / sides) * Math.PI * 2;
-    const radius = asteroid.radius * (0.78 + 0.22 * Math.sin(i * 7.13));
+    const radius =
+      asteroid.radius * (0.78 + 0.22 * Math.sin(i * 7.13));
     const x = Math.cos(angle) * radius;
     const y = Math.sin(angle) * radius;
+
     if (i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   }
+
   ctx.closePath();
   ctx.fillStyle = "#475569";
   ctx.fill();
   ctx.strokeStyle = "#94a3b8";
   ctx.stroke();
+
   ctx.restore();
 }
+
 
 function drawPickup(ctx, pickup) {
   ctx.save();
@@ -138,33 +222,74 @@ function drawExplosion(ctx, explosion) {
   ctx.restore();
 }
 
+
 function drawHud(ctx, world, stats) {
   const ship = world.player;
+  const margin = 12;
+  const maxWidth = Math.max(0, world.width - margin * 2);
+
+  ctx.save();
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+
   ctx.fillStyle = "#dbeafe";
   ctx.font = "13px ui-monospace, SFMono-Regular, Menlo, monospace";
-  ctx.fillText(`HP: ${ship?.hp ?? 0}/3`, 12, 20);
-  ctx.fillText(`Score: ${ship?.score ?? 0}`, 12, 40);
-  ctx.fillText(`Asteroids: ${[...world.ofKind("asteroid")].length}`, 12, 60);
-  ctx.fillStyle = "#94a3b8";
+
+  ctx.fillText(`HP: ${ship?.hp ?? 0}/3`, margin, 20);
+  ctx.fillText(`Score: ${ship?.score ?? 0}`, margin, 40);
   ctx.fillText(
-    `steps/s: ${stats.stepsPerSecond} · frames/s: ${stats.framesPerSecond} · ${stats.frameTimeMs.toFixed(1)} ms`,
-    12,
-    80,
+    `Asteroids: ${[...world.ofKind("asteroid")].length}`,
+    margin,
+    60,
   );
+
+  ctx.fillStyle = "#94a3b8";
+
+  const fpsText =
+    `FPS: ${stats.framesPerSecond} | ` +
+    `Steps/s: ${stats.stepsPerSecond} | ` +
+    `${stats.frameTimeMs.toFixed(1)} ms`;
+
+  ctx.fillText(
+    fpsText,
+    margin,
+    80,
+    maxWidth,
+  );
+
   if (ship?.dead) {
     ctx.fillStyle = "#fca5a5";
     ctx.font = "bold 22px system-ui";
+    ctx.textAlign = "center";
     ctx.fillText(
-      "RESPAWNING…",
-      Math.max(12, world.width / 2 - 80),
+      "RESPAWNING...",
+      world.width / 2,
       world.height / 2,
+      maxWidth,
     );
+    ctx.textAlign = "left";
   }
+
   ctx.font = "12px system-ui";
   ctx.fillStyle = "#9aa7ba";
-  ctx.fillText(
-    "W/↑ thrust · A/D or ←/→ rotate · SPACE/F fire · collect green pickups",
-    12,
-    world.height - 14,
-  );
+
+  const controls = [
+    "W / Up: thrust | A / D: rotate",
+    "Space / F: fire | Green: pickups",
+  ];
+
+  const lineHeight = 16;
+  const firstLineY = world.height - margin - lineHeight;
+
+  controls.forEach((line, index) => {
+    ctx.fillText(
+      line,
+      margin,
+      firstLineY + index * lineHeight,
+      maxWidth,
+    );
+  });
+
+  ctx.restore();
 }
+

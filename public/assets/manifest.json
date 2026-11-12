@@ -1,0 +1,18 @@
+{
+  "sprites": {
+    "type": "image",
+    "url": "/assets/sprites.svg"
+  },
+  "rooms": {
+    "type": "json",
+    "url": "/assets/rooms.json"
+  },
+  "shotSound": {
+    "type": "audio",
+    "url": "/assets/audio/shot.wav"
+  },
+  "hitSound": {
+    "type": "audio",
+    "url": "/assets/audio/hit.wav"
+  }
+}

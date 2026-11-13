@@ -1,4 +1,10 @@
 node_modules/
-dist/
+client/dist/
+server/logs/
+.env
 .vscode/
 .DS_Store
+*.zip
+
+dist/
+node_modules/

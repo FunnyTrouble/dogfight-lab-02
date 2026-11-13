@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="uk">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Dogfight — Lab 04. Гра з кімнатами та чатом через WebSocket."
+    />
+    <title>Dogfight — Lab 04</title>
+  </head>
+  <body>
+    <main class="game-shell">
+      <h1>Dogfight — Lab 04</h1>
+
+      <section id="lobby" class="lobby">
+        <h2>Космічне лобі</h2>
+        <p>Введи ім'я та вибери кімнату, щоб почати гру.</p>
+
+        <form id="lobby-form">
+          <label for="player-name">Ім'я гравця</label>
+          <input
+            id="player-name"
+            name="playerName"
+            type="text"
+            maxlength="20"
+            placeholder="Наприклад, Pilot"
+            required
+          />
+
+          <label for="room-select">Кімната</label>
+          <select id="room-select" name="room" required>
+            <option value="">Завантаження кімнат...</option>
+          </select>
+
+          <p id="lobby-status" role="status" aria-live="polite">
+            Завантаження доступних кімнат...
+          </p>
+
+          <button id="join-button" type="submit" disabled>Join</button>
+        </form>
+      </section>
+
+      <section id="chat-panel" class="chat-panel" hidden>
+        <h2>Кімнатний чат</h2>
+        <p id="connection-status" role="status">Підключення...</p>
+        <p id="room-roster" class="help">Учасники: —</p>
+        <ol id="chat-messages" class="chat-messages" aria-live="polite"></ol>
+        <form id="chat-form" class="chat-form">
+          <label for="chat-text">Повідомлення</label>
+          <input
+            id="chat-text"
+            maxlength="500"
+            autocomplete="off"
+            placeholder="Напиши повідомлення..."
+            required
+          />
+          <button type="submit">Надіслати</button>
+          <button id="leave-room" type="button">Вийти з кімнати</button>
+        </form>
+      </section>
+
+      <p class="help">
+        Керування: W / ↑ — рух, A / D або ← / → — поворот, Space / F — стрільба,
+        H — самонавідний постріл.
+      </p>
+
+      <div class="canvas-wrap">
+        <canvas id="game"></canvas>
+      </div>
+
+      <p class="help">Знищуй астероїди, набирай очки та уникай зіткнень.</p>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

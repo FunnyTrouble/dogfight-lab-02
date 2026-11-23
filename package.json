@@ -1,5 +1,5 @@
 {
-  "name": "dogfight-lab-05",
+  "name": "dogfight-lab-06",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -10,15 +10,20 @@
   "scripts": {
     "dev": "node scripts/dev.js",
     "build": "npm run build --workspace client",
-    "lint": "eslint client server",
+    "lint": "npm run typecheck && eslint scripts eslint.config.js",
     "start": "npm run start --workspace server",
     "test": "npm run test --workspace server",
     "experiment:backpressure": "node server/src/experiments/backpressure.js",
-    "format": "prettier --write \"client/**/*.{js,css,html,json,md}\" \"server/**/*.js\" \"*.json\" README.md"
+    "format": "prettier --write \"client/**/*.{ts,css,html,json,md}\" \"server/**/*.ts\" \"shared/**/*.ts\" \"*.json\" README.md",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
     "eslint": "^9.0.0",
-    "prettier": "^3.0.0"
+    "prettier": "^3.0.0",
+    "typescript": "^5.9.3",
+    "tsx": "^4.20.6",
+    "@types/node": "^22.15.0",
+    "@types/ws": "^8.18.1"
   }
 }

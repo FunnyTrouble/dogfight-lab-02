@@ -1,5 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import type { Server } from 'node:http';
+import type { Server, IncomingMessage } from 'node:http';
+import { logger } from './logger.js';
+import { traffic, rejectMetric } from './metrics.js';
 import type { RawData } from 'ws';
 import { packet, parseClientMessage } from './protocol.js';
 import { decodeInput } from '../../shared/protocol.js';
@@ -28,10 +30,28 @@ export function attachWebSocketServer(
   roomManager: RoomManager,
   settings: typeof config,
 ): {wss: WebSocketServer; close: () => Promise<void>} {
-  const wss = new WebSocketServer({ server, path: '/ws', maxPayload: settings.maxMessageBytes });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: settings.maxMessageBytes });
+  const ipCounts = new Map<string,number>();
+  let accepting = true;
+  function clientIp(req: IncomingMessage): string {
+    const forwarded = req.headers['x-forwarded-for'];
+    return (settings.trustProxy && typeof forwarded === 'string' && forwarded.length > 0) ? forwarded.split(',')[0]!.trim() : (req.socket.remoteAddress ?? 'unknown');
+  }
+  const upgrade = (req: IncomingMessage, socket: import('node:stream').Duplex, head: Buffer) => {
+    if (new URL(req.url ?? '/', 'http://localhost').pathname !== '/ws') { socket.destroy(); return; }
+    const origin = req.headers.origin;
+    const ip = clientIp(req);
+    const reason = !accepting ? 'shutdown' : (!origin || !settings.allowedOrigins.includes(origin)) ? 'origin' : (ipCounts.get(ip) ?? 0) >= settings.maxConnectionsPerIp ? 'ip_limit' : '';
+    if (reason) { rejectMetric(reason); logger.warn({reason,ip},'ws.rejected'); socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); socket.destroy(); return; }
+    try { wss.handleUpgrade(req,socket,head, ws => { wss.emit('connection',ws,req); }); }
+    catch (error) { logger.error({err:error},'ws.upgrade_failed'); socket.destroy(); }
+  };
+  server.on('upgrade', upgrade);
   const sockets = new Set<GameSocket>();
 
-  wss.on('connection', (rawSocket) => {
+  wss.on('connection', (rawSocket,req) => {
+    const ip = clientIp(req); ipCounts.set(ip,(ipCounts.get(ip) ?? 0)+1);
+    logger.info({ip},'ws.connected');
     // Object.assign extends a ws socket with its session fields without a type cast.
     const socket = Object.assign(rawSocket, {
       isAlive: true,
@@ -44,24 +64,25 @@ export function attachWebSocketServer(
       jsonProtocol: false,
     });
     sockets.add(socket);
-    socket.on('error', (error: Error) => console.error('WebSocket error:', error.message));
+    socket.on('error', (error: Error) => logger.warn({err:error,ip},'ws.error')); 
     const joinTimer = setTimeout(() => {
       if (!socket.player) socket.close(4001, 'join timeout');
     }, 5000);
 
     socket.on('pong', () => { socket.isAlive = true; socket.missedPongs = 0; });
     socket.on('message', (data: RawData, isBinary: boolean) => {
+      traffic.inMessages++; traffic.inBytes += Buffer.isBuffer(data) ? data.byteLength : Buffer.byteLength(data.toString());
       if (isBinary) {
         try {
           if (!socket.room) { socket.close(4001, 'join first'); return; }
-          if (!underLimit(socket.inputTimes, 45)) { socket.close(4029, 'input rate limit'); return; }
+          if (!underLimit(socket.inputTimes, 45)) { rejectMetric('input_rate'); socket.close(4029, 'input rate limit'); return; }
           const packetBuffer = Buffer.isBuffer(data) ? data : Buffer.concat(Array.isArray(data) ? data : [Buffer.from(data)]);
           const arrayBuffer = new ArrayBuffer(packetBuffer.byteLength);
           new Uint8Array(arrayBuffer).set(packetBuffer);
           const input = decodeInput(arrayBuffer);
           socket.room.acceptInput(socket, input);
         } catch (error: unknown) {
-          console.warn('Rejected binary input:', errorMessage(error));
+          rejectMetric('bad_binary'); logger.warn({err:errorMessage(error)},'ws.invalid_binary');
           socket.close(4002, errorMessage(error).slice(0, 100));
         }
         return;
@@ -70,18 +91,18 @@ export function attachWebSocketServer(
       if (Buffer.byteLength(raw) > settings.maxMessageBytes) { socket.close(4009, 'message too large'); return; }
       let parsed: unknown;
       try { parsed = JSON.parse(raw); }
-      catch (error: unknown) { console.warn('Invalid JSON:', errorMessage(error)); socket.close(4002, 'invalid JSON'); return; }
+      catch (error: unknown) { rejectMetric('bad_json'); logger.warn({err:errorMessage(error)},'ws.invalid_json'); socket.close(4002, 'invalid JSON'); return; }
       const checked = parseClientMessage(parsed);
-      if (!checked.ok) { console.warn('Rejected WebSocket message:', checked.reason); socket.close(4002, checked.reason.slice(0, 100)); return; }
+      if (!checked.ok) { rejectMetric('bad_message'); logger.warn({reason:checked.reason},'ws.invalid_message'); socket.close(4002, checked.reason.slice(0, 100)); return; }
       const message = checked.value;
       if (message.type !== 'input' && !underLimit(socket.messageTimes, settings.maxMessagesPerSecond)) {
-        socket.close(4029, 'rate limit'); return;
+        rejectMetric('rate_limit'); socket.close(4029, 'rate limit'); return;
       }
       try {
         switch (message.type) {
           case 'input': {
             if (!socket.room) { socket.close(4001, 'join first'); return; }
-            if (!underLimit(socket.inputTimes, 45)) { socket.close(4029, 'input rate limit'); return; }
+            if (!underLimit(socket.inputTimes, 45)) { rejectMetric('input_rate'); socket.close(4029, 'input rate limit'); return; }
             socket.jsonProtocol = true;
             socket.room.acceptInput(socket, message);
             return;
@@ -117,7 +138,7 @@ export function attachWebSocketServer(
         }
       } catch (error: unknown) {
         const messageText = errorMessage(error);
-        console.warn('Message handling failed:', messageText);
+        logger.warn({reason:messageText},'ws.message_failed');
         socket.send(packet('error', {message: messageText}));
         if (messageText.includes('заповнена')) socket.close(4003, 'room full');
       }
@@ -125,6 +146,7 @@ export function attachWebSocketServer(
     socket.on('close', () => {
       clearTimeout(joinTimer);
       sockets.delete(socket);
+      const count = (ipCounts.get(ip) ?? 1)-1; if (count>0) ipCounts.set(ip,count); else ipCounts.delete(ip);
       socket.room?.leave(socket);
       socket.room = null;
     });
@@ -143,8 +165,10 @@ export function attachWebSocketServer(
   return {
     wss,
     async close(): Promise<void> {
+      accepting = false;
+      server.off('upgrade', upgrade);
       clearInterval(heartbeat);
-      for (const socket of sockets) socket.close(1001, 'server shutdown');
+      for (const socket of sockets) { if (socket.readyState === WebSocket.OPEN) { socket.send(packet('shutdown', {message:'Server is restarting'})); socket.close(1001,'server shutdown'); } }
       await new Promise<void>((resolve) => {
         const timer = setTimeout(() => { for (const socket of sockets) socket.terminate(); resolve(); }, 1000);
         wss.close(() => { clearTimeout(timer); resolve(); });

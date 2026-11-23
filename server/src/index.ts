@@ -15,11 +15,13 @@ import { config } from "./config.js";
 import { RoomManager } from "./rooms.js";
 import { MatchLog } from "./log/matchlog.js";
 import { attachWebSocketServer } from "./ws.js";
+import { logger } from "./logger.js";
+import { metricsText } from "./metrics.js";
 
 const here = fileURLToPath(new URL("..", import.meta.url));
-const clientDist = resolve(here, "../client/dist");
-const seedPath = resolve(here, "../client/public/api/rooms");
-const mimeTypes: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".json": "application/json; charset=utf-8", ".png": "image/png", ".jpg": "image/jpeg", ".wav": "audio/wav", ".ico": "image/x-icon" };
+const clientDist = resolve(process.cwd(), "client/dist");
+const seedPath = resolve(process.cwd(), "client/public/api/rooms");
+const mimeTypes: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".json": "application/json; charset=utf-8", ".png": "image/png", ".jpg": "image/jpeg", ".wav": "audio/wav", ".ico": "image/x-icon", ".webmanifest": "application/manifest+json" };
 
 await mkdir(config.logDir, { recursive: true });
 let initialRooms: import("./rooms.js").RoomDetails[] = [{ id: "classic", name: "Classic Arena", description: "Звичайна арена для тренування", width: 1100, height: 700, asteroids: 8 }, { id: "easy", name: "Easy Arena", description: "Менше астероїдів для початківців", width: 1100, height: 700, asteroids: 4 }, { id: "hard", name: "Hard Arena", description: "Більше астероїдів і складніша гра", width: 1100, height: 700, asteroids: 14 }];
@@ -61,10 +63,13 @@ async function serveStatic(pathname: string, res: ServerResponse) {
 }
 
 const BotsSchema = z.object({count:z.number().int().min(0).max(8)});
+let shuttingDown = false;
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url || "/", `http://${req.headers.host || `${config.host}:${config.port}`}`);
-    if (req.method === "GET" && url.pathname === "/health") { sendJson(res, 200, { ok: true, uptime: Math.round(process.uptime()), rooms: roomManager.rooms.size }); return; }
+    if (req.method === 'GET' && url.pathname === '/health') { sendJson(res, 200, { ok: true, sha: config.gitSha, uptime: Math.round(process.uptime()) }); return; }
+    if (req.method === 'GET' && url.pathname === '/ready') { sendJson(res, shuttingDown ? 503 : 200, { ready: !shuttingDown }); return; }
+    if (req.method === 'GET' && url.pathname === '/metrics') { const body = metricsText(roomManager); res.writeHead(200, {'content-type':'text/plain; version=0.0.4; charset=utf-8','cache-control':'no-store'}); res.end(body); return; }
     if (req.method === 'GET' && url.pathname === '/api/stats') {
       sendJson(res,200,{rss:process.memoryUsage().rss, rooms:[...roomManager.rooms.values()].map(r=>({id:r.id,tickP99:r.tickP99(),bots:r.botIds.size,humans:r.players.size}))}); return;
     }
@@ -79,7 +84,7 @@ const server = createServer(async (req, res) => {
       const added=room.addBots(parsed.data.count);
       sendJson(res,200,{added,total:room.botIds.size});return;
     }
-    if (req.method === "GET" && url.pathname === "/api/slow") {
+    if (req.method === "GET" && url.pathname === "/api/slow" && process.env.NODE_ENV !== "production") {
       const started = Date.now();
       while (Date.now() - started < 300) { /* Deliberately block the event loop for the lab experiment. */ }
       sendJson(res, 200, { blockedMs: Date.now() - started, warning: "This route deliberately blocks the event loop." });
@@ -113,32 +118,34 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" || req.method === "HEAD") { await serveStatic(url.pathname, res); return; }
     sendJson(res, 405, { error: "Method not allowed" });
   } catch (error) {
-    console.error("HTTP handler error:", error);
+    logger.error({err:error},"http.handler_error");
     if (!res.headersSent) sendJson(res, 500, { error: "Internal server error" }); else res.destroy(error instanceof Error ? error : new Error(errMessage(error)));
   }
 });
 
 const ws = attachWebSocketServer(server, roomManager, config);
-let shuttingDown = false;
 async function shutdown(signal: string) {
   if (shuttingDown) return;
   shuttingDown = true;
-  console.log(`${signal}: shutting down`);
-  const forceTimer = setTimeout(() => { console.error("Shutdown timeout"); process.exit(1); }, 8000);
+  logger.info({signal},"server.stopping");
+  const forceTimer = setTimeout(() => { logger.error("server.shutdown_timeout"); process.exit(1); }, 8000);
   forceTimer.unref();
   try {
     await ws.close();
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     await roomManager.close();
     clearTimeout(forceTimer);
-    console.log("Server stopped; logs flushed.");
+    logger.info("server.stopped");
+    logger.flush();
     process.exitCode = 0;
   } catch (error) {
-    console.error("Shutdown failed:", error);
+    logger.error({err:error},"server.shutdown_failed");
     process.exitCode = 1;
   }
 }
 process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
-server.on("error", (error) => { console.error("HTTP server error:", error); void shutdown("server error"); });
-server.listen(config.port, config.host, () => console.log(`Dogfight Lab 07 listening at http://${config.host}:${config.port}`));
+server.on('error', error => { logger.fatal({err:error},'server.http_error'); process.exit(1); });
+process.on('uncaughtException', error => { logger.fatal({err:error},'server.uncaught_exception'); process.exit(1); });
+process.on('unhandledRejection', reason => { logger.fatal({err:reason},'server.unhandled_rejection'); process.exit(1); });
+server.listen(config.port, config.host, () => logger.info({host:config.host,port:config.port,sha:config.gitSha},"server.listening"));

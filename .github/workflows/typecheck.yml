@@ -1,4 +1,4 @@
-name: Tests and build
+﻿name: Tests and build
 on: [push, pull_request]
 jobs:
   test:
@@ -14,6 +14,7 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run test:coverage
-      - run: npm run build
+      - run: npm run build:production
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+

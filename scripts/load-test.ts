@@ -13,7 +13,7 @@ for (const size of sizes) {
   const sockets: WebSocket[]=[];let connected=0,errors=0;const start=performance.now();
   await Promise.all(Array.from({length:size},(_,i)=>new Promise<void>(resolve=>{
     const room=names[Math.floor(i/12)] ?? names[0]!;
-    const socket=new WebSocket(host.replace(/^http/,'ws')+'/ws');sockets.push(socket);
+    const socket=new WebSocket(host.replace(/^http/,'ws')+'/ws',{headers:{Origin:process.env.TEST_ORIGIN ?? 'http://localhost:3000'}});sockets.push(socket);
     const finish=()=>resolve();
     socket.once('open',()=>{connected++;socket.send(JSON.stringify({v:2,type:'join',room,name:`Load${i}`}));finish();});
     socket.once('error',()=>{errors++;finish();});

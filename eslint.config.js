@@ -4,7 +4,7 @@ export default [
   { ignores: ["**/node_modules/**", "client/dist/**", "server/logs/**"] },
   js.configs.recommended,
   {
-    files: ["**/*.js"],
+    files: ["**/*.{js,mjs}"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",

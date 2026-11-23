@@ -1,5 +1,5 @@
 {
-  "name": "dogfight-lab-07",
+  "name": "dogfight-lab-08",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -20,7 +20,11 @@
     "test:e2e": "playwright test",
     "test:legacy": "npm run test:legacy --workspace server",
     "bench:load": "tsx scripts/load-test.ts",
-    "bench:simulation": "tsx scripts/simulation-bench.ts"
+    "bench:simulation": "tsx scripts/simulation-bench.ts",
+    "build:server": "tsc --project tsconfig.production.json",
+    "build:production": "npm run build && npm run build:server",
+    "start:production": "node dist/server/src/index.js",
+    "test:production": "node scripts/production-check.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

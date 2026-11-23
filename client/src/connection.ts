@@ -67,6 +67,10 @@ export class GameConnection extends EventTarget {
               asteroids: snapshot.asteroids?.map(asteroid => ({...asteroid,kind:'asteroid',id:entityId(asteroid.id)})) ?? [],
               receivedAt: performance.now(), bytes: event.data.length,
             });
+          } else if (message.type === 'shutdown') {
+            this.closedByUser = true;
+            this.dispatchEvent(new CustomEvent('status', {detail:'server-shutdown'}));
+            this.dispatchEvent(new CustomEvent('packet', {detail:message}));
           } else this.dispatchEvent(new CustomEvent("packet", { detail: message }));
         }
       } catch { this.dispatchEvent(new CustomEvent("status", { detail: "invalid-message" })); }

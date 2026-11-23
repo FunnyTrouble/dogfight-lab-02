@@ -33,9 +33,10 @@ const serverRoster = z.object({v:version,type:z.literal('roster'),players:z.arra
 const serverChat = z.object({v:version,type:z.literal('chat'),name:z.string(),text:z.string(),at:z.number().optional()});
 const serverSystem = z.object({v:version,type:z.literal('system'),text:z.string()});
 const serverError = z.object({v:version,type:z.literal('error'),message:z.string()});
+const serverShutdown = z.object({v:version,type:z.literal('shutdown'),message:z.string()});
 const snapshotObject = z.object({tick:z.number().int().nonnegative(),ships:z.array(z.object({kind:z.literal('ship').optional(),id:z.number(),x:z.number(),y:z.number(),vx:z.number(),vy:z.number(),angle:z.number(),hp:z.number(),score:z.number(),lastAckSeq:z.number().optional(),name:z.string().optional()})),bullets:z.array(z.object({kind:z.literal('bullet').optional(),id:z.number(),owner:z.number(),x:z.number(),y:z.number(),vx:z.number(),vy:z.number()})),asteroids:z.array(z.object({kind:z.literal('asteroid').optional(),id:z.number(),x:z.number(),y:z.number(),vx:z.number(),vy:z.number(),radius:z.number()})).optional()});
 const serverSnapshot = z.object({v:version,type:z.literal('snapshot'),snapshot:snapshotObject});
-export const ServerMessageSchema = z.discriminatedUnion('type',[serverJoined,serverRoster,serverChat,serverSystem,serverError,serverSnapshot]);
+export const ServerMessageSchema = z.discriminatedUnion('type',[serverJoined,serverRoster,serverChat,serverSystem,serverError,serverShutdown,serverSnapshot]);
 export type ServerMessage = z.infer<typeof ServerMessageSchema>;
 export function parseServerMessage(value: unknown): ServerMessage | null {
   const result = ServerMessageSchema.safeParse(value);

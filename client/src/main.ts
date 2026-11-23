@@ -46,6 +46,8 @@ const audioContext = new AudioContext();
 const lobby = new Lobby({ statusElement: lobbyStatus, roomSelect, joinButton });
 let loadedAssets: Record<string, unknown> | null = null;
 let gameStarted = false;
+let deploymentSha = 'local';
+fetch('/health').then(r=>r.ok?r.json():null).then((data:unknown)=>{ if (data && typeof data === 'object' && 'sha' in data && typeof data.sha === 'string') deploymentSha=data.sha.slice(0,8); }).catch(()=>{});
 let retryButton: HTMLButtonElement | null = null;
 
 function drawLoadingProgress(progress: Progress) {
@@ -165,7 +167,7 @@ function startNetworkGame(room: LobbyRoom, playerName: string, audio: GameAudio 
   chatPanel.hidden = false; chatMessages.replaceChildren();
   connectionStatus.textContent = 'Підключення до авторитетного сервера...';
   connection.onStatus((status) => {
-    const labels: Record<string,string> = { connecting: 'Підключення...', connected: "З'єднання встановлено", disconnected: "З'єднання втрачено. Перепідключення...", error: 'Помилка WebSocket', 'invalid-message': 'Некоректний пакет' };
+    const labels: Record<string,string> = { connecting: 'Підключення...', connected: "З'єднання встановлено", disconnected: "З'єднання втрачено. Перепідключення...", error: 'Помилка WebSocket', 'invalid-message': 'Некоректний пакет', 'server-shutdown':'Сервер перезапускається. Повернення до лобі...'  };
     connectionStatus.textContent = labels[status] || status;
   });
   connection.onPacket((message) => {
@@ -174,6 +176,7 @@ function startNetworkGame(room: LobbyRoom, playerName: string, audio: GameAudio 
     else if (message.type === 'chat') addChatLine(`${message.name}: ${message.text}`);
     else if (message.type === 'system') addChatLine(`• ${message.text}`);
     else if (message.type === 'error') addChatLine(`Помилка: ${message.message}`);
+    else if (message.type === 'shutdown') { addChatLine('Сервер перезапускається. Повернення до лобі.'); setTimeout(()=>window.location.reload(),1200); }
   });
   connection.onSnapshot((snap) => { lastSnapshotAt = performance.now(); snapshotAge = 0;
     const ack = snap.ships.find((ship) => ship.id === localId)?.lastAckSeq;
@@ -242,7 +245,7 @@ function startNetworkGame(room: LobbyRoom, playerName: string, audio: GameAudio 
     for (const bullet of predictedBullets) drawNetBullet(ctx, { ...bullet, x: bullet.x + bullet.vx * Math.max(0, (now - bullet.born) / 1000), y: bullet.y + bullet.vy * Math.max(0, (now - bullet.born) / 1000) }, '#fbbf24');
     net.rtt = rtt; net.snapshotAge = snapshotAge; net.bytesPerSecond = bytesPerSecond; net.queue = pending.length;
     ctx.fillStyle = '#dbeafe'; ctx.font = '13px ui-monospace, monospace';
-    ctx.fillText(`SERVER TICK: ${latest?.tick ?? 0} | FPS ${fps} | steps/s ${stepRate}`, 12, 20);
+    ctx.fillText(`SERVER TICK: ${latest?.tick ?? 0} | FPS ${fps} | steps/s ${stepRate} | ${deploymentSha}`, 12, 20);
     ctx.fillText(`RTT ${net.rtt.toFixed(0)} ms | snapshot age ${net.snapshotAge.toFixed(0)} ms | ${net.bytesPerSecond} B/s`, 12, 40);
     ctx.fillText(`input queue ${net.queue} | correction ${net.correction.toFixed(1)} px | ${net.mode}`, 12, 60);
     ctx.fillStyle = '#94a3b8'; ctx.fillText('W/↑ gas · A/D/←/→ turn · Space/F fire · чужі кораблі відстають на 100 мс', 12, view.height - 14);
@@ -317,3 +320,5 @@ async function boot() {
 }
 
 boot();
+
+if ("serviceWorker" in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) { navigator.serviceWorker.register("/sw.js").catch(() => {}); }

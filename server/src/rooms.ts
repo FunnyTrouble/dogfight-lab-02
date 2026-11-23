@@ -9,6 +9,8 @@ import { EventEmitter } from "node:events";
 import { MatchLog } from "./log/matchlog.js";
 import { createShip, createAsteroids, stepWorld, DT } from "../../shared/simulation.js";
 import { encodeSnapshot } from "../../shared/protocol.js";
+import { traffic } from "./metrics.js";
+import { logger } from "./logger.js";
 import { BulletPool } from "../../shared/bullet-pool.js";
 
 export class Room extends EventEmitter<{event: [RoomEvent]; error: [Error]; empty: [Room]}> {
@@ -80,7 +82,7 @@ export class Room extends EventEmitter<{event: [RoomEvent]; error: [Error]; empt
     this.tickRunning = false;
     this.matchLog = new MatchLog(this, logDir);
     this.matchLog.start().catch((error) => this.emit("error", error instanceof Error ? error : new Error(String(error))));
-    this.on("error", (error) => console.error(`[room:${this.id}]`, error));
+    this.on("error", (error) => logger.error({err:error,roomId:this.id},"room.error"));
   }
 
   join(player: Player, socket: GameSocket) {
@@ -93,6 +95,7 @@ export class Room extends EventEmitter<{event: [RoomEvent]; error: [Error]; empt
     socket.playerId = player.id;
     this.startTicks();
     this.publish("join", { player: player.name });
+    logger.info({roomId:this.id,playerId:player.id},"player.joined");
     this.broadcast({ type: "system", text: `${player.name} приєднався(-лася) до кімнати.` });
     this.broadcastRoster();
   }
@@ -105,6 +108,7 @@ export class Room extends EventEmitter<{event: [RoomEvent]; error: [Error]; empt
     this.game.ships = this.game.ships.filter((ship) => ship.id !== player.id);
     this.game.bullets = this.game.bullets.filter((bullet) => bullet.owner !== player.id);
     this.publish("leave", { player: player.name });
+    logger.info({roomId:this.id,playerId:player.id},"player.left");
     this.broadcast({ type: "system", text: `${player.name} вийшов(-ла) з кімнати.` });
     this.broadcastRoster();
     if (this.players.size === 0) { this.stopTicks(); this.emit("empty", this); }
@@ -139,8 +143,8 @@ export class Room extends EventEmitter<{event: [RoomEvent]; error: [Error]; empt
         if (socket.jsonProtocol) {
           const own = snapshotShips.find((ship) => ship.id === socket.playerId);
           const message = JSON.stringify({ v: 2, type: "snapshot", snapshot: { tick: this.game.tick, ships: snapshotShips, bullets: this.game.bullets, asteroids: this.game.asteroids, ack: own?.lastAckSeq ?? asSeq(0) } });
-          socket.send(message);
-        } else socket.send(packet, { binary: true });
+          { socket.send(message); traffic.outMessages++; traffic.outBytes+=Buffer.byteLength(message); }
+        } else { socket.send(packet, { binary: true }); traffic.outMessages++; traffic.outBytes+=packet.length; }
       }
       this.tickTimer = setTimeout(tick, Math.max(0, this.tickDeadline - performance.now()));
     };
@@ -177,7 +181,7 @@ export class Room extends EventEmitter<{event: [RoomEvent]; error: [Error]; empt
     for (const socket of this.players.keys()) {
       if (socket.readyState !== 1) continue;
       if (socket.bufferedAmount > 64 * 1024 && message.type !== "roster") continue;
-      try { socket.send(data); } catch (error) { this.emit("error", error instanceof Error ? error : new Error(String(error))); }
+      try { socket.send(data); traffic.outMessages++; traffic.outBytes+=Buffer.byteLength(data); } catch (error) { this.emit("error", error instanceof Error ? error : new Error(String(error))); }
     }
   }
 
@@ -197,7 +201,7 @@ export class RoomManager extends EventEmitter<{error: [Error]; created: [Room]}>
     this.maxPlayersPerRoom = maxPlayersPerRoom;
     this.rooms = new Map<string, Room>();
     this.allRooms = new Set<Room>();
-    this.on("error", (error) => console.error("RoomManager error:", error));
+    this.on("error", (error) => logger.error({err:error},"room_manager.error"));
     for (const room of initialRooms) this.create(room, { seeded: true });
   }
 

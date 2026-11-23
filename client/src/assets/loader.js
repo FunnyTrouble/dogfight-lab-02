@@ -5,7 +5,8 @@ function delay(ms, signal) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(
-        signal.reason ?? new DOMException("Operation aborted", "AbortError"),
+        signal.reason ??
+          new DOMException("Operation aborted", "AbortError"),
       );
       return;
     }
@@ -18,7 +19,8 @@ function delay(ms, signal) {
     function onAbort() {
       clearTimeout(timer);
       reject(
-        signal.reason ?? new DOMException("Operation aborted", "AbortError"),
+        signal.reason ??
+          new DOMException("Operation aborted", "AbortError"),
       );
     }
 
@@ -28,12 +30,17 @@ function delay(ms, signal) {
 
 export async function withRetry(
   operation,
-  { attempts = DEFAULT_ATTEMPTS, baseMs = DEFAULT_BASE_MS, signal } = {},
+  {
+    attempts = DEFAULT_ATTEMPTS,
+    baseMs = DEFAULT_BASE_MS,
+    signal,
+  } = {},
 ) {
   for (let attempt = 0; ; attempt += 1) {
     if (signal?.aborted) {
       throw (
-        signal.reason ?? new DOMException("Operation aborted", "AbortError")
+        signal.reason ??
+        new DOMException("Operation aborted", "AbortError")
       );
     }
 
@@ -49,7 +56,11 @@ export async function withRetry(
         error.name === "TimeoutError" ||
         signal?.aborted;
 
-      if (permanentHttpError || isCancellation || attempt >= attempts - 1) {
+      if (
+        permanentHttpError ||
+        isCancellation ||
+        attempt >= attempts - 1
+      ) {
         throw error;
       }
 
@@ -78,17 +89,13 @@ export async function fetchJson(url, signal) {
 export async function loadImage(url, signal) {
   const response = await fetch(url, { signal });
   if (!response.ok) {
-    const error = new Error(
-      `Image request failed: ${response.status} ${response.statusText}`,
-    );
+    const error = new Error(`Image request failed: ${response.status} ${response.statusText}`);
     error.status = response.status;
     throw error;
   }
   const blob = await response.blob();
   if (signal?.aborted) {
-    throw (
-      signal.reason ?? new DOMException("Image loading aborted", "AbortError")
-    );
+    throw signal.reason ?? new DOMException("Image loading aborted", "AbortError");
   }
   const objectUrl = URL.createObjectURL(blob);
   try {
@@ -116,7 +123,8 @@ export async function loadAudio(audioContext, url, signal) {
 
   if (signal?.aborted) {
     throw (
-      signal.reason ?? new DOMException("Audio loading aborted", "AbortError")
+      signal.reason ??
+      new DOMException("Audio loading aborted", "AbortError")
     );
   }
 
@@ -124,15 +132,17 @@ export async function loadAudio(audioContext, url, signal) {
 }
 
 export function loadJson(url, signal) {
-  return withRetry((currentSignal) => fetchJson(url, currentSignal), {
-    signal,
-  });
+  return withRetry(
+    (currentSignal) => fetchJson(url, currentSignal),
+    { signal },
+  );
 }
 
 export function loadImageWithRetry(url, signal) {
-  return withRetry((currentSignal) => loadImage(url, currentSignal), {
-    signal,
-  });
+  return withRetry(
+    (currentSignal) => loadImage(url, currentSignal),
+    { signal },
+  );
 }
 
 export function loadAudioWithRetry(audioContext, url, signal) {
@@ -163,7 +173,8 @@ export async function loadAll(
       try {
         if (signal?.aborted) {
           throw (
-            signal.reason ?? new DOMException("Loading aborted", "AbortError")
+            signal.reason ??
+            new DOMException("Loading aborted", "AbortError")
           );
         }
 
@@ -178,7 +189,11 @@ export async function loadAll(
             throw new Error("AudioContext is required for audio assets");
           }
 
-          value = await loadAudioWithRetry(audioContext, asset.url, signal);
+          value = await loadAudioWithRetry(
+            audioContext,
+            asset.url,
+            signal,
+          );
         } else {
           throw new Error(`Unknown asset type: ${asset.type}`);
         }

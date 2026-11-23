@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="uk">
   <head>
@@ -5,13 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Dogfight — Lab 04. Гра з кімнатами та чатом через WebSocket."
+      content="Dogfight — Lab 05. Авторитетний сервер, передбачення та бінарний протокол."
     />
-    <title>Dogfight — Lab 04</title>
+    <title>Dogfight — Lab 05</title>
   </head>
   <body>
     <main class="game-shell">
-      <h1>Dogfight — Lab 04</h1>
+      <h1>Dogfight — Lab 05</h1>
 
       <section id="lobby" class="lobby">
         <h2>Космічне лобі</h2>
@@ -37,7 +38,9 @@
             Завантаження доступних кімнат...
           </p>
 
-          <button id="join-button" type="submit" disabled>Join</button>
+          <button id="join-button" type="submit" disabled>
+            Join
+          </button>
         </form>
       </section>
 
@@ -48,28 +51,24 @@
         <ol id="chat-messages" class="chat-messages" aria-live="polite"></ol>
         <form id="chat-form" class="chat-form">
           <label for="chat-text">Повідомлення</label>
-          <input
-            id="chat-text"
-            maxlength="500"
-            autocomplete="off"
-            placeholder="Напиши повідомлення..."
-            required
-          />
+          <input id="chat-text" maxlength="500" autocomplete="off" placeholder="Напиши повідомлення..." required />
           <button type="submit">Надіслати</button>
           <button id="leave-room" type="button">Вийти з кімнати</button>
         </form>
       </section>
 
       <p class="help">
-        Керування: W / ↑ — рух, A / D або ← / → — поворот, Space / F — стрільба,
-        H — самонавідний постріл.
+        Керування: W / ↑ — рух, A / D або ← / → — поворот,
+        Space / F — стрільба, H — самонавідний постріл.
       </p>
 
       <div class="canvas-wrap">
         <canvas id="game"></canvas>
       </div>
 
-      <p class="help">Знищуй астероїди, набирай очки та уникай зіткнень.</p>
+      <p class="help">
+        Знищуй астероїди, набирай очки та уникай зіткнень.
+      </p>
     </main>
 
     <script type="module" src="/src/main.js"></script>

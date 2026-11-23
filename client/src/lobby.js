@@ -35,13 +35,10 @@ export class Lobby extends EventTarget {
         option.textContent = `${room.name} — ${room.description}`;
         this.roomSelect.append(option);
       }
-      if (this.rooms.some((room) => room.id === selected))
-        this.roomSelect.value = selected;
+      if (this.rooms.some((room) => room.id === selected)) this.roomSelect.value = selected;
       this.joinButton.disabled = false;
       this.statusElement.textContent = `${this.rooms.length} кімнат доступно. Вибери арену та приєднуйся.`;
-      this.dispatchEvent(
-        new CustomEvent("rooms-updated", { detail: this.rooms }),
-      );
+      this.dispatchEvent(new CustomEvent("rooms-updated", { detail: this.rooms }));
     } catch (error) {
       if (controller.signal.aborted || !this.visible) return;
       console.error("Не вдалося завантажити кімнати:", error);
@@ -49,9 +46,7 @@ export class Lobby extends EventTarget {
       const retryButton = document.createElement("button");
       retryButton.type = "button";
       retryButton.textContent = "Повторити";
-      retryButton.addEventListener("click", () => this.refresh(), {
-        once: true,
-      });
+      retryButton.addEventListener("click", () => this.refresh(), { once: true });
       this.statusElement.append(retryButton);
       this.joinButton.disabled = true;
     }

@@ -41,6 +41,7 @@ export class World extends EventTarget {
     }
   }
 
+  
   step(dt, inputs) {
     this.spawnTimer -= dt;
     this.pickupTimer -= dt;
@@ -166,9 +167,7 @@ export class World extends EventTarget {
 
   createExplosion(position, radius) {
     const explosion = this.spawn(new Explosion(position, radius));
-    this.dispatchEvent(
-      new CustomEvent("exploded", { detail: { position, radius, explosion } }),
-    );
+    this.dispatchEvent(new CustomEvent("exploded", { detail: { position, radius, explosion } }));
     return explosion;
   }
 

@@ -5,6 +5,3 @@ server/logs/
 .vscode/
 .DS_Store
 *.zip
-
-dist/
-node_modules/

@@ -24,6 +24,7 @@ export function drawBackground(ctx, width, height) {
   }
 }
 
+
 export function drawWorld(ctx, world, stats, assets = {}) {
   const sprites = assets.sprites;
 
@@ -40,6 +41,8 @@ export function drawWorld(ctx, world, stats, assets = {}) {
   drawHud(ctx, world, stats);
 }
 
+
+
 function drawShip(ctx, ship, sprites) {
   ctx.save();
   ctx.translate(ship.position.x, ship.position.y);
@@ -54,7 +57,17 @@ function drawShip(ctx, ship, sprites) {
       : 1;
 
   if (sprites) {
-    ctx.drawImage(sprites, 0, ship.thrust ? 0 : 64, 64, 64, -32, -32, 64, 64);
+    ctx.drawImage(
+      sprites,
+      0,
+      ship.thrust ? 0 : 64,
+      64,
+      64,
+      -32,
+      -32,
+      64,
+      64,
+    );
 
     ctx.restore();
     return;
@@ -85,6 +98,8 @@ function drawShip(ctx, ship, sprites) {
   ctx.restore();
 }
 
+
+
 function drawBullet(ctx, bullet, sprites) {
   if (sprites) {
     const size = Math.max(12, bullet.radius * 4);
@@ -105,13 +120,21 @@ function drawBullet(ctx, bullet, sprites) {
   }
 
   ctx.beginPath();
-  ctx.arc(bullet.position.x, bullet.position.y, bullet.radius, 0, Math.PI * 2);
+  ctx.arc(
+    bullet.position.x,
+    bullet.position.y,
+    bullet.radius,
+    0,
+    Math.PI * 2,
+  );
   ctx.fillStyle = bullet.behavior ? "#c4b5fd" : "#fbbf24";
   ctx.shadowColor = ctx.fillStyle;
   ctx.shadowBlur = 10;
   ctx.fill();
   ctx.shadowBlur = 0;
 }
+
+
 
 function drawAsteroid(ctx, asteroid, sprites) {
   ctx.save();
@@ -144,7 +167,8 @@ function drawAsteroid(ctx, asteroid, sprites) {
 
   for (let i = 0; i < sides; i += 1) {
     const angle = (i / sides) * Math.PI * 2;
-    const radius = asteroid.radius * (0.78 + 0.22 * Math.sin(i * 7.13));
+    const radius =
+      asteroid.radius * (0.78 + 0.22 * Math.sin(i * 7.13));
     const x = Math.cos(angle) * radius;
     const y = Math.sin(angle) * radius;
 
@@ -160,6 +184,7 @@ function drawAsteroid(ctx, asteroid, sprites) {
 
   ctx.restore();
 }
+
 
 function drawPickup(ctx, pickup) {
   ctx.save();
@@ -197,6 +222,7 @@ function drawExplosion(ctx, explosion) {
   ctx.restore();
 }
 
+
 function drawHud(ctx, world, stats) {
   const ship = world.player;
   const margin = 12;
@@ -224,13 +250,23 @@ function drawHud(ctx, world, stats) {
     `Steps/s: ${stats.stepsPerSecond} | ` +
     `${stats.frameTimeMs.toFixed(1)} ms`;
 
-  ctx.fillText(fpsText, margin, 80, maxWidth);
+  ctx.fillText(
+    fpsText,
+    margin,
+    80,
+    maxWidth,
+  );
 
   if (ship?.dead) {
     ctx.fillStyle = "#fca5a5";
     ctx.font = "bold 22px system-ui";
     ctx.textAlign = "center";
-    ctx.fillText("RESPAWNING...", world.width / 2, world.height / 2, maxWidth);
+    ctx.fillText(
+      "RESPAWNING...",
+      world.width / 2,
+      world.height / 2,
+      maxWidth,
+    );
     ctx.textAlign = "left";
   }
 
@@ -246,8 +282,14 @@ function drawHud(ctx, world, stats) {
   const firstLineY = world.height - margin - lineHeight;
 
   controls.forEach((line, index) => {
-    ctx.fillText(line, margin, firstLineY + index * lineHeight, maxWidth);
+    ctx.fillText(
+      line,
+      margin,
+      firstLineY + index * lineHeight,
+      maxWidth,
+    );
   });
 
   ctx.restore();
 }
+

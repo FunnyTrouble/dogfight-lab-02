@@ -9,6 +9,7 @@ import { EventEmitter } from "node:events";
 import { MatchLog } from "./log/matchlog.js";
 import { createShip, createAsteroids, stepWorld, DT } from "../../shared/simulation.js";
 import { encodeSnapshot } from "../../shared/protocol.js";
+import { BulletPool } from "../../shared/bullet-pool.js";
 
 export class Room extends EventEmitter<{event: [RoomEvent]; error: [Error]; empty: [Room]}> {
   readonly id: string;
@@ -27,6 +28,40 @@ export class Room extends EventEmitter<{event: [RoomEvent]; error: [Error]; empt
   tickRunning: boolean;
   readonly matchLog: MatchLog;
   seeded = false;
+  readonly botIds = new Set<number>();
+  readonly tickDurations: number[] = [];
+  /** Bots use the same input records consumed by stepWorld as human players. */
+  addBots(count: number): number {
+    const amount = Math.min(8 - this.botIds.size, Math.max(0, Math.floor(count)));
+    for (let i = 0; i < amount; i++) {
+      const id = this.nextPlayerId++;
+      const bot = createShip(id, `Bot-${id}`, id, this.game.ships.length);
+      this.botIds.add(id);
+      this.game.ships.push(bot);
+      this.inputs.set(id, { seq: asSeq(0), thrust: true, turn: 0, fire: false });
+    }
+    if (amount) this.startTicks();
+    return amount;
+  }
+  updateBots(): void {
+    for (const id of this.botIds) {
+      const ship = this.game.ships.find(s => s.id === id);
+      if (!ship) continue;
+      const target = this.game.ships.find(s => s.id !== id && !this.botIds.has(s.id))
+        ?? this.game.ships.find(s => s.id !== id);
+      if (!target) continue;
+      const desired = Math.atan2(target.y - ship.y, target.x - ship.x);
+      const difference = Math.atan2(Math.sin(desired - ship.angle), Math.cos(desired - ship.angle));
+      this.inputs.set(id, { seq: asSeq(this.game.tick + 1), thrust: true,
+        turn: difference > .08 ? 1 : difference < -.08 ? -1 : 0,
+        fire: Math.abs(difference) < .25 });
+    }
+  }
+  tickP99(): number {
+    const sorted = [...this.tickDurations].sort((a,b)=>a-b);
+    return sorted[Math.max(0,Math.ceil(sorted.length*.99)-1)] ?? 0;
+  }
+
   constructor({ id, name, description, width = 1100, height = 700, asteroids = 8 }: RoomDetails, { logDir, maxPlayers }: RoomOptions) {
     super();
     this.id = id;
@@ -37,7 +72,7 @@ export class Room extends EventEmitter<{event: [RoomEvent]; error: [Error]; empt
     this.asteroids = asteroids;
     this.players = new Map<GameSocket, Player>();
     this.maxPlayers = maxPlayers;
-    this.game = { tick: asTick(0), ships: [], bullets: [], nextBulletId: 1, asteroids: createAsteroids(asteroids, [...id].reduce((n, c) => (Math.imul(n, 31) + c.charCodeAt(0)) >>> 0, 17)) };
+    this.game = { tick: asTick(0), ships: [], bullets: [], nextBulletId: 1, bulletPool: new BulletPool(256), asteroids: createAsteroids(asteroids, [...id].reduce((n, c) => (Math.imul(n, 31) + c.charCodeAt(0)) >>> 0, 17)) };
     this.inputs = new Map<number, Input>();
     this.nextPlayerId = 1;
     this.tickTimer = null;
@@ -91,7 +126,12 @@ export class Room extends EventEmitter<{event: [RoomEvent]; error: [Error]; empt
     const tick = () => {
       if (!this.tickRunning) return;
       this.tickDeadline += DT * 1000;
+      this.updateBots();
+      const tickStart = performance.now();
       stepWorld(this.game, this.inputs, DT);
+      const tickMs = performance.now() - tickStart;
+      this.tickDurations.push(tickMs);
+      if (this.tickDurations.length > 1200) this.tickDurations.shift();
       const snapshotShips = this.game.ships.map((ship) => ({ ...ship, lastAckSeq: this.playersById(ship.id)?.lastAckSeq ?? asSeq(0) }));
       const packet = Buffer.from(encodeSnapshot({ tick: this.game.tick, ships: snapshotShips, bullets: this.game.bullets, asteroids: this.game.asteroids }));
       for (const socket of this.players.keys()) {

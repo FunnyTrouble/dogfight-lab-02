@@ -60,10 +60,25 @@ async function serveStatic(pathname: string, res: ServerResponse) {
   }
 }
 
+const BotsSchema = z.object({count:z.number().int().min(0).max(8)});
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url || "/", `http://${req.headers.host || `${config.host}:${config.port}`}`);
     if (req.method === "GET" && url.pathname === "/health") { sendJson(res, 200, { ok: true, uptime: Math.round(process.uptime()), rooms: roomManager.rooms.size }); return; }
+    if (req.method === 'GET' && url.pathname === '/api/stats') {
+      sendJson(res,200,{rss:process.memoryUsage().rss, rooms:[...roomManager.rooms.values()].map(r=>({id:r.id,tickP99:r.tickP99(),bots:r.botIds.size,humans:r.players.size}))}); return;
+    }
+    const botsMatch = url.pathname.match(/^\/api\/rooms\/([a-z0-9-]+)\/bots$/);
+    if (req.method === 'POST' && botsMatch) {
+      const room = roomManager.get(botsMatch[1] ?? '');
+      if (!room) {sendJson(res,404,{error:'Room not found'});return;}
+      let raw: unknown;
+      try {raw=JSON.parse(await readBody(req));} catch {sendJson(res,400,{error:'Invalid JSON'});return;}
+      const parsed=BotsSchema.safeParse(raw);
+      if (!parsed.success) {sendJson(res,400,{error:'Invalid bot count'});return;}
+      const added=room.addBots(parsed.data.count);
+      sendJson(res,200,{added,total:room.botIds.size});return;
+    }
     if (req.method === "GET" && url.pathname === "/api/slow") {
       const started = Date.now();
       while (Date.now() - started < 300) { /* Deliberately block the event loop for the lab experiment. */ }
@@ -126,4 +141,4 @@ async function shutdown(signal: string) {
 process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 server.on("error", (error) => { console.error("HTTP server error:", error); void shutdown("server error"); });
-server.listen(config.port, config.host, () => console.log(`Dogfight Lab 06 listening at http://${config.host}:${config.port}`));
+server.listen(config.port, config.host, () => console.log(`Dogfight Lab 07 listening at http://${config.host}:${config.port}`));

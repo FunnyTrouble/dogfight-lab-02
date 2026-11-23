@@ -17,8 +17,14 @@ import { Lobby } from "./lobby.js";
 import { GameAudio } from "./audio.js";
 import { GameConnection } from "./connection.js";
 import { Bus } from "../../shared/events.js";
+import { FrameStats } from "../../shared/frame-stats.js";
+import { reconcileShip } from "../../shared/reconcile.js";
+import { benchmarkReplayWorker } from "./worker-experiment.js";
 import type { GameEvents } from "../../shared/events.js";
 const gameplayEvents = new Bus<GameEvents>();
+const frameStats = new FrameStats(1800);
+// DevTools: run `window.dogfightFrameStats()` after 30 seconds to read p50/p95/p99.
+Object.assign(window, { dogfightFrameStats: () => frameStats.summary(), dogfightWorkerExperiment: benchmarkReplayWorker });
 
 const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
 const lobbyElement = document.querySelector<HTMLElement>("#lobby")!;
@@ -51,7 +57,7 @@ function drawLoadingProgress(progress: Progress) {
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#e9eef7";
   ctx.font = "bold 26px system-ui";
-  ctx.fillText("DOGFIGHT — LAB 06", width / 2, height / 2 - 55);
+  ctx.fillText("DOGFIGHT — LAB 07", width / 2, height / 2 - 55);
   ctx.font = "16px system-ui";
   ctx.fillStyle = "#9aa7ba";
   ctx.fillText("Завантаження ресурсів...", width / 2, height / 2 - 15);
@@ -181,9 +187,9 @@ function startNetworkGame(room: LobbyRoom, playerName: string, audio: GameAudio 
     if (own) {
       const beforeX = predicted.x; const beforeY = predicted.y; const beforeAngle = predicted.angle;
       Object.assign(predicted, own);
-      const unacked = pending.filter((item) => item.seq > (own.lastAckSeq ?? 0));
-      pending.splice(0, pending.length, ...unacked);
-      if (!naive) for (const item of pending) integrateShip(predicted, item, DT);
+      const replayed = reconcileShip(predicted, naive ? [] : pending, own.lastAckSeq ?? asSeq(0));
+      pending.splice(0, pending.length, ...pending.filter(item => item.seq > (own.lastAckSeq ?? 0)));
+      if (!naive) Object.assign(predicted, replayed.ship);
       correctionX = beforeX - predicted.x; correctionY = beforeY - predicted.y;
       correctionAngle = beforeAngle - predicted.angle; correctionLeft = 0.1;
       net.correction = Math.hypot(correctionX, correctionY);
@@ -192,8 +198,11 @@ function startNetworkGame(room: LobbyRoom, playerName: string, audio: GameAudio 
   });
   connection.connect({ room: room.id, name: playerName });
 
+  let remoteState: SnapshotShip[] = [];
+  Object.assign(window, { dogfightRemoteState: () => remoteState.map(s => ({id:s.id,x:s.x,y:s.y})) });
   let accumulator = 0; let previous = performance.now(); let frames = 0; let fpsAt = previous; let fps = 0; let steps = 0; let stepsAt = previous; let stepRate = 0;
   function render(now: number) {
+    frameStats.add(now - previous);
     const elapsed = Math.min(0.1, (now - previous) / 1000); previous = now; accumulator += elapsed;
     while (accumulator >= DT) {
       const controls = readInput(); seq += 1;
@@ -223,6 +232,7 @@ function startNetworkGame(room: LobbyRoom, playerName: string, audio: GameAudio 
       const alpha = b.time === a.time ? 1 : Math.max(0, Math.min(1, (renderTime - a.time) / (b.time - a.time)));
       remoteShips = a.ships.filter((ship) => ship.id !== localId).map((ship) => { const other = b.ships.find((item) => item.id === ship.id) || ship; return { ...ship, x: ship.x + (other.x - ship.x) * alpha, y: ship.y + (other.y - ship.y) * alpha, angle: ship.angle + (other.angle - ship.angle) * alpha }; });
     } else remoteShips = state.ships.filter((ship) => ship.id !== localId);
+    remoteState = remoteShips;
     for (const asteroid of state.asteroids ?? []) drawNetAsteroid(ctx, asteroid);
     for (const ship of remoteShips) drawNetShip(ctx, ship, '#f9a8d4');
     const visualShip = { ...predicted, x: predicted.x + correctionX, y: predicted.y + correctionY, angle: predicted.angle + correctionAngle };

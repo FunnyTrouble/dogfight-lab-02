@@ -1,5 +1,5 @@
 {
-  "name": "dogfight-lab-06",
+  "name": "dogfight-lab-07",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -12,10 +12,15 @@
     "build": "npm run build --workspace client",
     "lint": "npm run typecheck && eslint scripts eslint.config.js",
     "start": "npm run start --workspace server",
-    "test": "npm run test --workspace server",
+    "test": "vitest run --config vitest.config.ts",
     "experiment:backpressure": "node server/src/experiments/backpressure.js",
     "format": "prettier --write \"client/**/*.{ts,css,html,json,md}\" \"server/**/*.ts\" \"shared/**/*.ts\" \"*.json\" README.md",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:coverage": "vitest run --coverage --config vitest.config.ts",
+    "test:e2e": "playwright test",
+    "test:legacy": "npm run test:legacy --workspace server",
+    "bench:load": "tsx scripts/load-test.ts",
+    "bench:simulation": "tsx scripts/simulation-bench.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
@@ -24,6 +29,10 @@
     "typescript": "^5.9.3",
     "tsx": "^4.20.6",
     "@types/node": "^22.15.0",
-    "@types/ws": "^8.18.1"
+    "@types/ws": "^8.18.1",
+    "vitest": "^3.2.4",
+    "@vitest/coverage-v8": "^3.2.4",
+    "fast-check": "^4.3.0",
+    "@playwright/test": "^1.55.0"
   }
 }

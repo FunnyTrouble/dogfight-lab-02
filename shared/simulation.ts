@@ -1,4 +1,5 @@
-// Lab 06: shared deterministic simulation. No DOM or Node imports.
+import type { BulletPool } from './bullet-pool.js';
+// Lab 07: shared deterministic simulation. No DOM or Node imports.
 export type Brand<Tag extends string> = number & { readonly __brand: Tag };
 export type EntityId = Brand<'EntityId'>;
 export type Tick = Brand<'Tick'>;
@@ -29,7 +30,7 @@ export function entityLabel(entity: SnapshotEntity): string {
     default: { const impossible: never = entity; return impossible; }
   }
 }
-export type WorldState = { tick: Tick; ships: Ship[]; bullets: Bullet[]; asteroids?: Asteroid[]; nextBulletId: number };
+export type WorldState = { tick: Tick; ships: Ship[]; bullets: Bullet[]; asteroids?: Asteroid[]; nextBulletId: number; bulletPool?: BulletPool };
 // Pure shared simulation: no DOM, Node APIs, wall-clock time, or Math.random().
 export const TICK_RATE = 30;
 export const DT = 1 / TICK_RATE;
@@ -76,7 +77,8 @@ export function stepWorld(state: WorldState, inputs: ReadonlyMap<number, Input>,
     integrateShip(ship, input, dt);
     if (input.fire && ship.fireCooldown <= 0) {
       const speed = 360;
-      state.bullets.push({ kind: 'bullet', id: entityId(state.nextBulletId++), owner: ship.id, x: ship.x + Math.cos(ship.angle) * 20, y: ship.y + Math.sin(ship.angle) * 20, vx: ship.vx + Math.cos(ship.angle) * speed, vy: ship.vy + Math.sin(ship.angle) * speed, life: 1.4 });
+      const spawned: Bullet = {kind:'bullet',id:entityId(state.nextBulletId++),owner:ship.id,x:ship.x+Math.cos(ship.angle)*20,y:ship.y+Math.sin(ship.angle)*20,vx:ship.vx+Math.cos(ship.angle)*speed,vy:ship.vy+Math.sin(ship.angle)*speed,life:1.4};
+      state.bullets.push(state.bulletPool?.acquire(spawned) ?? spawned);
       ship.fireCooldown = 0.24;
     }
   }
@@ -92,28 +94,30 @@ export function stepWorld(state: WorldState, inputs: ReadonlyMap<number, Input>,
   }
   const survivingBullets: Bullet[] = [];
   for (const bullet of state.bullets) {
-    if (bullet.life <= 0) continue;
+    if (bullet.life <= 0) {state.bulletPool?.release(bullet);continue;}
     const asteroid = (state.asteroids || []).find((item) =>
-      Math.hypot(item.x - bullet.x, item.y - bullet.y) < item.radius + 3);
+      (item.x - bullet.x) ** 2 + (item.y - bullet.y) ** 2 < (item.radius + 3) ** 2);
     if (asteroid) {
       state.asteroids = (state.asteroids ?? []).filter((item) => item.id !== asteroid.id);
       const owner = state.ships.find((ship) => ship.id === bullet.owner);
       if (owner) owner.score = Math.min(255, owner.score + 1);
+      state.bulletPool?.release(bullet);
       continue;
     }
-    const target = state.ships.find((ship) => ship.id !== bullet.owner && ship.hp > 0 && Math.hypot(ship.x - bullet.x, ship.y - bullet.y) < 18);
+    const target = state.ships.find((ship) => ship.id !== bullet.owner && ship.hp > 0 && (ship.x - bullet.x) ** 2 + (ship.y - bullet.y) ** 2 < 18 ** 2);
     if (target) {
       target.hp -= 1;
       const owner = state.ships.find((ship) => ship.id === bullet.owner);
       if (owner) owner.score = Math.min(255, owner.score + 1);
       if (target.hp <= 0) { target.hp = 3; target.x = target.id % 2 ? 180 : 920; target.y = target.id % 2 ? 180 : 520; target.vx = 0; target.vy = 0; }
+      state.bulletPool?.release(bullet);
       continue;
     }
     survivingBullets.push(bullet);
   }
   state.bullets = survivingBullets;
   for (const ship of state.ships) {
-    const asteroid = (state.asteroids || []).find((item) => Math.hypot(item.x - ship.x, item.y - ship.y) < item.radius + 15);
+    const asteroid = (state.asteroids || []).find((item) => (item.x - ship.x) ** 2 + (item.y - ship.y) ** 2 < (item.radius + 15) ** 2);
     if (asteroid) {
       ship.hp -= 1;
       state.asteroids = (state.asteroids ?? []).filter((item) => item.id !== asteroid.id);
